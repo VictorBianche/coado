@@ -288,7 +288,7 @@ const BREWERS = {
   },
 };
 
-const brewerOf = (kind) => BREWERS[kind] || BREWERS.v60;
+const brewerOf = (kind) => (Object.prototype.hasOwnProperty.call(BREWERS, kind) ? BREWERS[kind] : BREWERS.v60);
 
 // Miniatura do método para cards e cabeçalhos
 function miniBrewer(kind) {

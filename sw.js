@@ -1,6 +1,6 @@
 // Service worker: deixa o app disponível offline.
 // Ao publicar uma versão nova, aumente o número em CACHE.
-const CACHE = 'coffee-lab-v4';
+const CACHE = 'coffee-lab-v5';
 const ASSETS = [
   './',
   './index.html',

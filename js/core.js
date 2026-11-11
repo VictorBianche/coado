@@ -282,15 +282,46 @@ function seedState() {
   return s;
 }
 
+// Os dados vêm do armazenamento local ou de um arquivo de backup, então não são
+// confiáveis: aqui cada registro é reduzido a textos e números com os tipos esperados.
+const NUM_KEYS = ['stockG', 'coffeeG', 'tempC', 'durationS', 'waterG', 'totalS', 'rating'];
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+function cleanRecord(o) {
+  const out = {};
+  Object.keys(o).forEach((k) => {
+    if (k === '__proto__' || k === 'steps') return;
+    const v = o[k];
+    if (NUM_KEYS.indexOf(k) >= 0) {
+      out[k] = v === '' || v == null ? '' : Math.max(0, Number(v) || 0);
+    } else if (typeof v === 'string' || typeof v === 'boolean') {
+      out[k] = v;
+    } else {
+      out[k] = typeof v === 'number' && Number.isFinite(v) ? String(v) : '';
+    }
+  });
+  return out;
+}
+
 function normalizeState(s) {
-  const arr = (x) => (Array.isArray(x) ? x : []);
+  const list = (x) => (Array.isArray(x) ? x : []).filter((o) => o && typeof o === 'object' && !Array.isArray(o)).map(cleanRecord);
+  const raw = (x) => (Array.isArray(x) ? x : []).filter((o) => o && typeof o === 'object' && !Array.isArray(o));
   return {
-    beans: arr(s.beans),
-    methods: arr(s.methods),
-    recipes: arr(s.recipes).map((r) => Object.assign({}, r, { steps: arr(r.steps) })),
-    logs: arr(s.logs),
-    settings: Object.assign({ sound: true }, s.settings),
-    libSeen: arr(s.libSeen),
+    beans: list(s.beans),
+    methods: list(s.methods).map((m) => {
+      if (!hasOwn(METHOD_KINDS, m.kind)) m.kind = 'outro';
+      return m;
+    }),
+    recipes: raw(s.recipes).map((r) => Object.assign(cleanRecord(r), {
+      steps: list(r.steps).map((st) => {
+        if (!hasOwn(STEP_KINDS, st.kind)) st.kind = 'espera';
+        if (!hasOwn(PATTERNS, st.pattern)) st.pattern = '';
+        return st;
+      }),
+    })),
+    logs: list(s.logs),
+    settings: { sound: !(s.settings && s.settings.sound === false) },
+    libSeen: (Array.isArray(s.libSeen) ? s.libSeen : []).filter((x) => typeof x === 'string'),
   };
 }
 
