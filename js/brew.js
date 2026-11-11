@@ -290,6 +290,34 @@ const BREWERS = {
 
 const brewerOf = (kind) => (Object.prototype.hasOwnProperty.call(BREWERS, kind) ? BREWERS[kind] : BREWERS.v60);
 
+// Miniatura do moedor (manual ou elétrico)
+function miniGrinder(kind) {
+  const art = kind === 'eletrico'
+    ? // funil com grãos, anel de regulagem e corpo
+      '<path d="M173 74 L181 110 A14 8 0 0 0 209 110 L217 74 Z" fill="#6B4129"/>' +
+      '<path d="M169 62 L181 110 A14 8 0 0 0 209 110 L221 62 Z"' + GLASS + '/>' +
+      ell(62, 26, 'rgba(255,255,255,.35)', ' stroke="rgba(255,255,255,.9)" stroke-width="1.5"') +
+      frustum(112, 25, 180, 29, '#3F443E') + frustumShade(112, 25, 180, 29, 0.28) +
+      '<path d="M170 112 L170 119 A25 14.4 0 0 0 220 119 L220 112 Z" fill="#B8794E"/>' +
+      ell(112, 25, '#555B53') + ell(111, 17, '#2A2C29') +
+      '<path d="M184 150 L184 172 A11 5 0 0 0 206 172 L206 150 Z" fill="#232622"/>' +
+      '<circle cx="195" cy="140" r="3" fill="#D9A64E"/>'
+    : // corpo de aço, copo coletor e manivela com pomo de madeira
+      '<path d="M176 140 L176 178 A19 11 0 0 0 214 178 L214 140 Z" fill="#2F322E"/>' +
+      '<path d="M195 140 L214 140 L214 178 A19 11 0 0 1 195 189 Z" fill="rgba(0,0,0,.22)"/>' +
+      '<path d="M176 92 L176 140 A19 11 0 0 0 214 140 L214 92 Z" fill="#C9CCC8"/>' +
+      '<path d="M195 92 L214 92 L214 140 A19 11 0 0 1 195 151 Z" fill="rgba(40,28,18,.18)"/>' +
+      shine('M180.5 100 L180.5 134') +
+      '<path d="M176 136 A19 11 0 0 0 214 136" fill="none" stroke="#8A8D86" stroke-width="1.6"/>' +
+      ell(92, 19, '#E3E6E1', ' stroke="#AEB2AD" stroke-width="1.2"') + ell(91, 5, '#8A8D86') +
+      '<path d="M195 90 L234 78" stroke="#AEB2AD" stroke-width="5" stroke-linecap="round"/>' +
+      '<path d="M234 78 L234 68" stroke="#8A8D86" stroke-width="3" stroke-linecap="round"/>' +
+      '<ellipse cx="234" cy="63" rx="7.5" ry="8.5" fill="#A8754E"/>' +
+      '<path d="M234 54.5 A7.5 8.5 0 0 1 234 71.5 Z" fill="rgba(40,28,18,.2)"/>';
+  return '<svg viewBox="138 50 116 158" aria-hidden="true">' +
+    '<ellipse cx="195" cy="184" rx="38" ry="13" fill="rgba(0,0,0,.14)"/>' + art + '</svg>';
+}
+
 // Miniatura do método para cards e cabeçalhos
 function miniBrewer(kind) {
   return '<svg viewBox="138 50 116 158" aria-hidden="true">' +
@@ -469,6 +497,9 @@ function brewScreen(route) {
   const bean = byId(state.beans, route.beanId);
   const method = byId(state.methods, recipe.methodId);
   const B = brewerOf(method ? method.kind : '');
+  const grinder = byId(state.grinders, route.grinderId);
+  const grindSetting = grinder && route.grind > 0 ? route.grind : '';
+  const grindText = grindSetting ? fmtGrind(grindSetting, grinder.unit) + ' no ' + grinder.name : '';
 
   // Métodos de imersão com saída fechada só drenam a partir da última ação (apoiar na xícara, pressionar)
   let releaseAt = null;
@@ -589,7 +620,7 @@ function brewScreen(route) {
     h('div', { class: 'kicker' }, 'Antes de começar'),
     h('h2', { class: 'headline' }, 'Tudo pronto?'),
     h('ul', { class: 'prep' },
-      h('li', null, h('strong', null, fmtG(dose) + ' g'), ' de café' + (recipe.grind ? ', moagem ' + recipe.grind.toLowerCase() : '')),
+      h('li', null, h('strong', null, fmtG(dose) + ' g'), ' de café' + (recipe.grind ? ', moagem ' + recipe.grind.toLowerCase() : '') + (grindText ? ' · ' + grindText : '')),
       h('li', null, h('strong', null, tl.totalG + ' g'), ' de água' + (recipe.tempC ? ' a ' + recipe.tempC + ' °C' : '')),
       h('li', null, 'Escalde o filtro, coloque o café e zere a balança.')));
   nextEl.textContent = 'Toque em Iniciar junto com o primeiro despejo';
@@ -776,7 +807,8 @@ function brewScreen(route) {
     panel.replaceChildren(
       h('div', { class: 'kicker' }, 'Concluído'),
       h('h2', { class: 'headline' }, 'Café pronto!'),
-      h('p', { class: 'detail' }, fmtG(dose) + ' g de café · ' + tl.totalG + ' g de água · ' + fmtTime(tl.totalS)),
+      h('p', { class: 'detail' }, fmtG(dose) + ' g de café · ' + tl.totalG + ' g de água · ' + fmtTime(tl.totalS) +
+        (grindText ? ' · ' + fmtGrind(grindSetting, grinder.unit) : '')),
       h('div', { class: 'card finish-card' },
         h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Sua nota'), h('div', { class: 'stars' }, starBtns)),
         h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Anotações'), notes),
@@ -794,6 +826,10 @@ function brewScreen(route) {
         recipeName: recipe.name,
         beanId: bean ? bean.id : '',
         beanName: bean ? bean.name : '',
+        grinderId: grindSetting ? grinder.id : '',
+        grinderName: grindSetting ? grinder.name : '',
+        grindSetting: grindSetting,
+        grindUnit: grindSetting ? grinder.unit : '',
         coffeeG: dose,
         waterG: tl.totalG,
         totalS: tl.totalS,

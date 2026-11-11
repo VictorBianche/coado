@@ -140,6 +140,7 @@ svg { display: block; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; margin-bottom: -4px; min-height: 40px; }
 .section-title { font-family: var(--serif); font-weight: 400; font-size: 22px; margin-top: 8px; }
 .section-head .section-title { margin-top: 0; }
+.section-head.first { margin-top: 0; }
 
 .strip {
   display: flex;

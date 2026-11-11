@@ -119,7 +119,7 @@ function daysSince(dateStr) {
 const TABS = [
   ['recipes', 'Receitas', svgIcon('<path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5v2.5M12 3.5v2.5"/>')],
   ['beans', 'Grãos', svgIcon('<ellipse cx="12" cy="12" rx="6" ry="8.5" transform="rotate(30 12 12)"/><path d="M15.5 5c-5 3.5 1.5 9-7 14"/>')],
-  ['methods', 'Métodos', svgIcon('<path d="M4 6h16l-5 9H9z"/><path d="M9 15v2.5h6V15M12 17.5V21"/>')],
+  ['methods', 'Equipamentos', svgIcon('<path d="M4 6h16l-5 9H9z"/><path d="M9 15v2.5h6V15M12 17.5V21"/>')],
   ['history', 'Histórico', svgIcon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>')],
   ['settings', 'Ajustes', svgIcon('<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="17" r="2" fill="currentColor"/>')],
 ];
@@ -181,9 +181,12 @@ const TAB_VIEWS = {
   }),
 
   methods: () => ({
-    title: 'Métodos',
-    action: addButton(() => go({ name: 'methodEdit' })),
-    body: state.methods.length
+    title: 'Equipamentos',
+    body: [
+      h('div', { class: 'section-head first' },
+        h('h2', { class: 'section-title' }, 'Métodos'),
+        addButton(() => go({ name: 'methodEdit' }))),
+      state.methods.length
       ? state.methods.map((m) => {
         const used = state.recipes.filter((r) => r.methodId === m.id).length;
         return h('button', { class: 'card card-btn method-card', onclick: () => go({ name: 'methodEdit', id: m.id }) },
@@ -196,6 +199,22 @@ const TAB_VIEWS = {
           h('span', { class: 'chev', html: ICON.back }));
       })
       : emptyMsg('Cadastre os métodos de preparo que você tem disponíveis.'),
+      h('div', { class: 'section-head' },
+        h('h2', { class: 'section-title' }, 'Moedores'),
+        addButton(() => go({ name: 'grinderEdit' }))),
+      state.grinders.length
+        ? state.grinders.map((g) => {
+          const used = state.recipes.filter((r) => r.grinderId === g.id).length;
+          return h('button', { class: 'card card-btn method-card grinder-card', onclick: () => go({ name: 'grinderEdit', id: g.id }) },
+            h('span', { class: 'thumb', html: miniGrinder(g.kind) }),
+            h('span', { class: 'grow' },
+              h('span', { class: 'card-title' }, g.name),
+              h('span', { class: 'muted' }, GRINDER_KINDS[g.kind] + ' · ajuste em ' + GRIND_UNITS[g.unit].toLowerCase()),
+              h('span', { class: 'card-meta' }, used === 1 ? '1 receita' : used + ' receitas')),
+            h('span', { class: 'chev', html: ICON.back }));
+        })
+        : emptyMsg('Cadastre seu moedor para anotar o ajuste de moagem de cada receita.'),
+    ],
   }),
 
   history: () => ({
@@ -221,6 +240,8 @@ const TAB_VIEWS = {
             })),
           h('div', { class: 'card-meta' }, (l.beanName ? l.beanName + ' · ' : '') + fmtG(l.coffeeG) + ' g café · ' +
             l.waterG + ' g água · ' + fmtTime(l.totalS)),
+          l.grindSetting > 0 ? h('div', { class: 'card-meta' }, 'Moagem: ' + fmtGrind(l.grindSetting, l.grindUnit) +
+            (l.grinderName ? ' · ' + l.grinderName : '')) : '',
           l.rating ? h('div', { class: 'rating' }, [1, 2, 3, 4, 5].map((n) => h('span', { class: n <= l.rating ? 'on' : '', html: ICON.star }))) : '',
           l.notes ? h('p', { class: 'note' }, l.notes) : ''))
       : emptyMsg('Os cafés que você preparar com o guia aparecem aqui.'),
@@ -345,6 +366,48 @@ function recipeScreen(route) {
     route.beanId = byId(state.beans, r.beanId) ? r.beanId : '';
   }
 
+  if (route.grinderId === undefined || (route.grinderId && !byId(state.grinders, route.grinderId))) {
+    route.grinderId = byId(state.grinders, r.grinderId) ? r.grinderId : (state.grinders.length === 1 ? state.grinders[0].id : '');
+    route.grindAuto = true;
+  }
+  // Enquanto o usuário não digitar um valor, o ajuste acompanha a sugestão
+  if (route.grindAuto !== false) {
+    route.grindAuto = true;
+    route.grind = suggestGrind(r, route.beanId, route.grinderId).value;
+  }
+
+  // Ajuste de moagem deste preparo: parte da sugestão e pode ser alterado na hora
+  const grindInput = h('input', {
+    type: 'text', inputmode: 'decimal',
+    oninput: (e) => {
+      const v = num(e.target.value, 0);
+      route.grind = v > 0 ? v : '';
+      route.grindAuto = false;
+    },
+  });
+  const grindLabel = h('span', { class: 'field-label' }, 'Ajuste');
+  const grindHint = h('small', { class: 'muted' });
+  const grindField = h('label', { class: 'field' }, grindLabel, grindInput, grindHint);
+
+  function refreshGrind(resuggest) {
+    const g = byId(state.grinders, route.grinderId);
+    const sg = suggestGrind(r, route.beanId, route.grinderId);
+    if (resuggest) {
+      route.grind = sg.value;
+      route.grindAuto = true;
+    }
+    grindInput.value = route.grind > 0 ? fmtG(route.grind) : '';
+    grindField.hidden = !g;
+    if (!g) return;
+    grindLabel.textContent = 'Ajuste (' + GRIND_UNITS[g.unit].toLowerCase() + ')';
+    grindHint.textContent = sg.from === 'log'
+      ? 'Último preparo ' + (route.beanId ? 'com este grão' : 'desta receita') + ': ' + fmtGrind(sg.value, g.unit) +
+        (sg.rating ? ' · nota ' + sg.rating : '')
+      : sg.from === 'recipe' ? 'Ponto de partida da receita: ' + fmtGrind(sg.value, g.unit)
+        : 'Sem registro ainda' + (route.beanId ? ' com este grão.' : '.');
+  }
+  refreshGrind(false);
+
   const stats = h('div', { class: 'stats' });
   const warn = h('div');
   const stepsBox = h('div', { class: 'card steps' });
@@ -365,7 +428,9 @@ function recipeScreen(route) {
   }
   refresh();
 
-  const info2 = [r.grind ? 'Moagem ' + r.grind.toLowerCase() : '', r.tempC ? r.tempC + ' °C' : '']
+  const rg = byId(state.grinders, r.grinderId);
+  const info2 = [r.grind ? 'Moagem ' + r.grind.toLowerCase() : '', rg && r.grindSetting > 0 ? fmtGrind(r.grindSetting, rg.unit) : '',
+    r.tempC ? r.tempC + ' °C' : '']
     .filter(Boolean).join(' · ');
 
   return page({
@@ -394,8 +459,13 @@ function recipeScreen(route) {
             },
           }), 'A água acompanha a proporção.'),
           field('Grão', select(beanOptions(), route.beanId, {
-            onchange: (e) => { route.beanId = e.target.value; refresh(); },
+            onchange: (e) => { route.beanId = e.target.value; refresh(); refreshGrind(true); },
           }))),
+        state.grinders.length ? h('div', { class: 'grid2' },
+          field('Moedor', select([['', 'Nenhum']].concat(state.grinders.map((g) => [g.id, g.name])), route.grinderId, {
+            onchange: (e) => { route.grinderId = e.target.value; refreshGrind(true); },
+          })),
+          grindField) : '',
         warn),
       h('h2', { class: 'section-title' }, 'Etapas'),
       stepsBox,
@@ -414,7 +484,7 @@ function recipeScreen(route) {
     footer: h('footer', { class: 'action-bar' },
       h('button', {
         class: 'btn primary', disabled: !r.steps.length,
-        onclick: () => go({ name: 'brew', recipeId: r.id, dose: route.dose, beanId: route.beanId }),
+        onclick: () => go({ name: 'brew', recipeId: r.id, dose: route.dose, beanId: route.beanId, grinderId: route.grinderId, grind: route.grind }),
       }, h('span', { class: 'btn-icon', html: ICON.play }), h('span', null, 'Iniciar guia'))),
   });
 }
@@ -426,7 +496,7 @@ function recipeEditScreen(route) {
     const src = byId(state.recipes, route.id);
     route.draft = src ? JSON.parse(JSON.stringify(src)) : {
       id: '', name: '', methodId: state.methods.length ? state.methods[0].id : '', beanId: '',
-      coffeeG: 15, tempC: 93, grind: '', notes: '',
+      coffeeG: 15, tempC: 93, grind: '', grinderId: '', grindSetting: '', notes: '',
       steps: [newStep('bloom', 10, 45, 'espiral'), newStep('espera', 35), newStep('despejo', 30, 205, 'espiral'), newStep('espera', 60)],
     };
   }
@@ -495,6 +565,8 @@ function recipeEditScreen(route) {
       d.steps[i].durationS = Math.round(d.steps[i].durationS);
       if (!(d.steps[i].durationS >= 1)) { alert('A etapa ' + (i + 1) + ' precisa de uma duração em segundos.'); return; }
     }
+    if (!byId(state.grinders, d.grinderId)) d.grinderId = '';
+    if (!d.grinderId || !(d.grindSetting > 0)) d.grindSetting = '';
     if (isNew) {
       d.id = uid();
       state.recipes.push(d);
@@ -517,6 +589,7 @@ function recipeEditScreen(route) {
     render();
   }
 
+  const editGrinder = byId(state.grinders, d.grinderId);
   const body = [
     h('div', { class: 'card' },
       field('Nome', textInput(d, 'name', { placeholder: 'Ex.: V60 de domingo' })),
@@ -529,7 +602,11 @@ function recipeEditScreen(route) {
         })),
         field('Café (g)', numInput(d, 'coffeeG', refreshSummary)),
         field('Água (°C)', numInput(d, 'tempC', null, { inputmode: 'numeric' })),
-        field('Moagem', textInput(d, 'grind', { placeholder: 'Ex.: média-fina' }))),
+        field('Moagem', textInput(d, 'grind', { placeholder: 'Ex.: média-fina' })),
+        state.grinders.length ? field('Moedor', select([['', 'Nenhum']].concat(state.grinders.map((g) => [g.id, g.name])),
+          editGrinder ? d.grinderId : '', { onchange: (e) => { d.grinderId = e.target.value; render(true); } })) : '',
+        editGrinder ? field('Ajuste (' + GRIND_UNITS[editGrinder.unit].toLowerCase() + ')',
+          numInput(d, 'grindSetting', null, { placeholder: 'Opcional' })) : ''),
       field('Notas', textInput(d, 'notes', { placeholder: 'Opcional' }))),
     h('h2', { class: 'section-title' }, 'Etapas'),
     d.steps.map(stepCard),
@@ -658,6 +735,61 @@ function methodEditScreen(route) {
   });
 }
 
+// ---------- Moedor: edição ----------
+
+function grinderEditScreen(route) {
+  if (!route.draft) {
+    const src = byId(state.grinders, route.id);
+    route.draft = src ? Object.assign({}, src) : { id: '', name: '', kind: 'manual', unit: 'clicks', notes: '' };
+  }
+  const d = route.draft;
+  const isNew = !d.id;
+
+  function saveGrinder() {
+    d.name = (d.name || '').trim();
+    if (!d.name) { alert('Dê um nome ao moedor.'); return; }
+    if (isNew) {
+      d.id = uid();
+      state.grinders.push(d);
+    } else {
+      state.grinders = state.grinders.map((g) => (g.id === d.id ? d : g));
+    }
+    save();
+    back();
+  }
+
+  function deleteGrinder() {
+    const used = state.recipes.filter((r) => r.grinderId === d.id).length;
+    const msg = 'Apagar “' + d.name + '”?' + (used ? ' As receitas que usam este moedor perdem o ajuste de moagem.' : '');
+    if (!confirm(msg)) return;
+    state.grinders = state.grinders.filter((g) => g.id !== d.id);
+    state.recipes.forEach((r) => { if (r.grinderId === d.id) { r.grinderId = ''; r.grindSetting = ''; } });
+    save();
+    back();
+  }
+
+  const art = h('div', { class: 'method-art', html: miniGrinder(d.kind) });
+
+  return page({
+    cls: 'has-footer',
+    title: isNew ? 'Novo moedor' : 'Editar moedor',
+    onBack: back,
+    body: [
+      art,
+      h('div', { class: 'card' },
+        field('Nome', textInput(d, 'name', { placeholder: 'Ex.: iCoffee M3 Pro' })),
+        h('div', { class: 'grid2' },
+          field('Tipo', select(Object.entries(GRINDER_KINDS), d.kind, {
+            onchange: (e) => { d.kind = e.target.value; art.innerHTML = miniGrinder(d.kind); },
+          })),
+          field('Ajuste em', select(Object.entries(GRIND_UNITS), d.unit, { onchange: (e) => { d.unit = e.target.value; } }))),
+        field('Notas', textInput(d, 'notes', { placeholder: 'Ex.: zero = mós encostadas' }))),
+      isNew ? '' : h('button', { class: 'btn danger', onclick: deleteGrinder }, 'Apagar moedor'),
+    ],
+    footer: h('footer', { class: 'action-bar' }, h('button', { class: 'btn primary', onclick: saveGrinder }, 'Salvar')),
+  });
+}
+
 // ---------- Inicialização ----------
 
 const SCREENS = {
@@ -666,6 +798,7 @@ const SCREENS = {
   recipeEdit: recipeEditScreen,
   beanEdit: beanEditScreen,
   methodEdit: methodEditScreen,
+  grinderEdit: grinderEditScreen,
   brew: brewScreen,
 };
 

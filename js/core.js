@@ -60,6 +60,26 @@ const METHOD_KINDS = {
   outro: 'Outro',
 };
 
+const GRINDER_KINDS = {
+  manual: 'Manual',
+  eletrico: 'Elétrico',
+};
+
+// Como o moedor é regulado
+const GRIND_UNITS = {
+  clicks: 'Clicks',
+  numero: 'Número do dial',
+  voltas: 'Voltas',
+};
+
+// Ajuste de moagem por extenso: "24 clicks", "nº 5,5", "2,5 voltas"
+function fmtGrind(v, unit) {
+  const n = fmtG(v);
+  if (unit === 'numero') return 'nº ' + n;
+  if (unit === 'voltas') return n + (Number(v) === 1 ? ' volta' : ' voltas');
+  return n + (Number(v) === 1 ? ' click' : ' clicks');
+}
+
 const STEP_KINDS = {
   bloom: 'Pré-infusão',
   despejo: 'Despejo',
@@ -277,14 +297,14 @@ function mergeLibrary(s) {
 }
 
 function seedState() {
-  const s = { beans: [], methods: [], recipes: [], logs: [], settings: { sound: true }, libSeen: [] };
+  const s = { beans: [], methods: [], grinders: [], recipes: [], logs: [], settings: { sound: true }, libSeen: [] };
   mergeLibrary(s);
   return s;
 }
 
 // Os dados vêm do armazenamento local ou de um arquivo de backup, então não são
 // confiáveis: aqui cada registro é reduzido a textos e números com os tipos esperados.
-const NUM_KEYS = ['stockG', 'coffeeG', 'tempC', 'durationS', 'waterG', 'totalS', 'rating'];
+const NUM_KEYS = ['stockG', 'coffeeG', 'tempC', 'durationS', 'waterG', 'totalS', 'rating', 'grindSetting'];
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 function cleanRecord(o) {
@@ -312,6 +332,11 @@ function normalizeState(s) {
       if (!hasOwn(METHOD_KINDS, m.kind)) m.kind = 'outro';
       return m;
     }),
+    grinders: list(s.grinders).map((g) => {
+      if (!hasOwn(GRINDER_KINDS, g.kind)) g.kind = 'manual';
+      if (!hasOwn(GRIND_UNITS, g.unit)) g.unit = 'clicks';
+      return g;
+    }),
     recipes: raw(s.recipes).map((r) => Object.assign(cleanRecord(r), {
       steps: list(r.steps).map((st) => {
         if (!hasOwn(STEP_KINDS, st.kind)) st.kind = 'espera';
@@ -338,6 +363,20 @@ function loadState() {
 }
 
 let state = loadState();
+
+// Ajuste de moagem sugerido para um preparo: o último usado com esta receita,
+// este grão e este moedor; se não houver, o ponto de partida gravado na receita.
+function suggestGrind(recipe, beanId, grinderId) {
+  if (!grinderId) return { value: '', from: '' };
+  let last = null;
+  state.logs.forEach((l) => {
+    if (l.recipeId === recipe.id && (l.beanId || '') === (beanId || '') && l.grinderId === grinderId &&
+      l.grindSetting > 0 && (!last || l.date > last.date)) last = l;
+  });
+  if (last) return { value: last.grindSetting, from: 'log', rating: last.rating };
+  if (recipe.grinderId === grinderId && recipe.grindSetting > 0) return { value: recipe.grindSetting, from: 'recipe' };
+  return { value: '', from: '' };
+}
 
 function save() {
   try {
